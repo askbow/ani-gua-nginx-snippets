@@ -1,0 +1,89 @@
+# This is a Wordpress security helper nginx config snippet
+#
+# Sources: http://blog.kplus.pro/adm/total-wordpress-secutity.html
+#          https://www.nginx.com/blog/9-tips-for-improving-wordpress-performance-with-nginx/
+# IMPORTANT: including this file is not enough security
+#            use a WAF plugin
+#            use a Captcha plugin
+#            consider using this plugin: https://gist.githubusercontent.com/tarampampam/a011dd4c62b1f7121991/raw/1d7f790c4aae55d43dc0e399d09195181f46807f/remove-wp-version.php
+#            consider using fail2ban
+# Usage:
+# 
+# server {
+#          ...         # general server section setup
+# 
+#          include sites-enabled/wordpress.secure.setup # this file
+#
+#          location ... # the general instruction
+
+
+
+
+# Deny access to uploads that are not images, videos, music, etc.
+location ~* /(?:uploads|files)/.*\.(html|htm|shtml|php|js|swf)$ {return 444;}
+
+# Deny a bunch of other things
+location ~* \.(engine|inc|info|install|make|module|profile|test|po|sh|.*sql|theme|tpl(\.php)?|xtmpl)$|^(\..*|Entries.*|Repository|Root|Tag|Template)$|\.php_ { return 444;}
+
+# Deny anything that ENDS in these:
+location ~* /((wp-config|plugin_upload|dl-skin|uploadify|xmlrpc|wp-comments-post).php|readme.(html|txt|md)|license.(html|txt|md)|(.*)/(revslider|showbiz|infocus|awake|echelon|elegance|dejavu|persuasion|wp-filemanager|churchope|uploadify)/(.*))$ {  return 444;}
+
+# NOTE: this denies access to xmlrpc.
+#       xmlrpc is used by Wordpress clients and attackers alike
+#       consider what's more important to you
+
+
+# Deny anything that CONTAINS one of these:
+location ~* /((wp-config|plugin_upload|xmlrpc).php|(readme|license|changelog).(html|txt|md)|(debug|access|error)(.|_)log)$ {  return 444;}
+
+# Deny access to potential backups of these files (might be redundant, given the above statement)
+location ~* /.*((wp-config|xmlrpc).*(php(_bak|~|#)|txt|old|bak|save|orig(|inal)|swp|swo)).*$ {  return 444;}
+ 
+# Deny bad URL parameters (..?a=evil)
+if ($query_string ~* "^(.*)(wp-config.php|dl-skin.php|xmlrpc.php|uploadify.php|admin-ajax.php|local.xml)(.*)$") {  return 444;}
+
+# Help fight some SQL injections <http://habrahabr.ru/company/xakep/blog/259843/>
+if ($query_string ~* "(concat.*\(|union.*select.*\(|union.*all.*select)") {  return 444;}
+
+# Prevent author information harvest
+if ($query_string ~* "author=[0-9]") {return 301 $scheme://$host/;}
+
+# Prevent directory browsing using //example.com/wp/wp-content/.. and //example.com/page/wp-content/..
+location ~* /(wp|page)/.*wp-.*/.*$ {return 444;}
+
+# Try to prevent fingerprinting with WPScan (http://wpscan.org/)
+location = /wp-includes/css/buttons-rtl.css {
+  if ($http_referer !~* "/wp-admin") {return 404;}
+}
+location = /wp-includes/js/tinymce/wp-tinymce.js.gz {
+  if ($http_referer !~* "/wp-admin") {return 404;}
+}
+# Block WPScan (which requests robots.txt with referer set, while browsers do otherwise)
+# By blocking robots.txt form it, we make WPScan somewhat less useful
+location = /robots.txt {if ($http_referer != "") {return 404;}}
+
+# Generally block non-php scripts
+location ~* \.(pl|cgi|py|sh|lua)\$ { return 444;}
+
+# Block access to these directories
+location = /wp-content/ {return 404;}
+location = /wp-includes/ {return 404;}
+location = /wp-content/plugins/ {return 404;}
+location = /wp-content/themes/ {return 404;}
+location = /wp-content/languages/ {return 404;}
+location = /wp-content/languages/plugins/ {return 404;}
+location = /wp-content/languages/themes/ {return 404;}
+
+# Block access to plugin's directories
+location ~* /wp-content/plugins/([0-9a-z\-_]+)(/|$) {return 404;}
+
+# Block access to translations (they are useful to detect WP version)
+location ~ /wp-content/languages/(.+)\.(po|mo)$ {return 404;}
+
+# Block specific useragents <http://habrahabr.ru/post/168739/>
+if ($http_user_agent ~* (nmap|nikto|wikto|sf|sqlmap|bsqlbf|w3af|acunetix|havij|appscan|nic.ru|monitoring|semalt|virusdie|indy|perl|php|python|wpscan)) {return 403;}
+
+# Block empty useragent, with some specific degrees of empty, namely - empty and "-"
+if ($http_user_agent ~ ^(|-|_)$) {return 403;}
+
+
